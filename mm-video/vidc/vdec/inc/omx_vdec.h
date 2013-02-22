@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------
-Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
+Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -8,7 +8,7 @@ modification, are permitted provided that the following conditions are met:
     * Redistributions in binary form must reproduce the above copyright
       notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-    * Neither the name of Code Aurora nor
+    * Neither the name of the Linux Foundation nor
       the names of its contributors may be used to endorse or promote
       products derived from this software without specific prior written
       permission.
@@ -51,6 +51,9 @@ static ptrdiff_t x;
 #ifdef _ANDROID_
 #ifdef USE_ION
 #include <linux/msm_ion.h>
+#ifndef NEW_ION_API
+#define ION_FLAG_CACHED CACHED
+#endif
 #endif
 #include <binder/MemoryHeapBase.h>
 #include <ui/ANativeObjectBase.h>
@@ -67,21 +70,6 @@ extern "C"{
 #define LOG_TAG "OMX-VDEC-1080P"
 #else
 #define LOG_TAG "OMX-VDEC"
-#endif
-#ifdef ENABLE_DEBUG_LOW
-#define DEBUG_PRINT_LOW ALOGE
-#else
-#define DEBUG_PRINT_LOW
-#endif
-#ifdef ENABLE_DEBUG_HIGH
-#define DEBUG_PRINT_HIGH ALOGE
-#else
-#define DEBUG_PRINT_HIGH
-#endif
-#ifdef ENABLE_DEBUG_ERROR
-#define DEBUG_PRINT_ERROR ALOGE
-#else
-#define DEBUG_PRINT_ERROR
 #endif
 
 #else //_ANDROID_
@@ -194,6 +182,7 @@ extern "C" {
 #define OMX_INTERLACE_EXTRADATA 0x00020000
 #define OMX_TIMEINFO_EXTRADATA  0x00040000
 #define OMX_PORTDEF_EXTRADATA   0x00080000
+#define OMX_EXTNUSER_EXTRADATA  0x00100000
 #define DRIVER_EXTRADATA_MASK   0x0000FFFF
 
 #define OMX_INTERLACE_EXTRADATA_SIZE ((sizeof(OMX_OTHER_EXTRADATATYPE) +\
@@ -242,6 +231,8 @@ struct video_driver_context
     struct vdec_ion *ip_buf_ion_info;
     struct vdec_ion *op_buf_ion_info;
     struct vdec_ion h264_mv;
+    struct vdec_ion meta_buffer;
+    struct vdec_ion meta_buffer_iommu;
 #endif
     struct vdec_framerate frame_rate;
     unsigned extradata;
@@ -249,6 +240,7 @@ struct video_driver_context
     char kind[128];
     bool idr_only_decoding;
     unsigned disable_dmx;
+    unsigned enable_sec_metadata;
 };
 
 #ifdef _ANDROID_
@@ -591,6 +583,7 @@ private:
 	void stream_off();
     void adjust_timestamp(OMX_S64 &act_timestamp);
     void set_frame_rate(OMX_S64 act_timestamp);
+    void handle_extradata_secure(OMX_BUFFERHEADERTYPE *p_buf_hdr);
     void handle_extradata(OMX_BUFFERHEADERTYPE *p_buf_hdr);
     OMX_ERRORTYPE enable_extradata(OMX_U32 requested_extradata, bool enable = true);
     void print_debug_extradata(OMX_OTHER_EXTRADATATYPE *extra);
@@ -607,6 +600,8 @@ private:
     void append_terminator_extradata(OMX_OTHER_EXTRADATATYPE *extra);
     OMX_ERRORTYPE update_portdef(OMX_PARAM_PORTDEFINITIONTYPE *portDefn);
     void append_portdef_extradata(OMX_OTHER_EXTRADATATYPE *extra);
+    void append_extn_extradata(OMX_OTHER_EXTRADATATYPE *extra, OMX_OTHER_EXTRADATATYPE *p_extn);
+    void append_user_extradata(OMX_OTHER_EXTRADATATYPE *extra, OMX_OTHER_EXTRADATATYPE *p_user);
     void insert_demux_addr_offset(OMX_U32 address_offset);
     void extract_demux_addr_offsets(OMX_BUFFERHEADERTYPE *buf_hdr);
     OMX_ERRORTYPE handle_demux_data(OMX_BUFFERHEADERTYPE *buf_hdr);
@@ -644,6 +639,8 @@ private:
 #ifdef MAX_RES_1080P
     OMX_ERRORTYPE vdec_alloc_h264_mv();
     void vdec_dealloc_h264_mv();
+    OMX_ERRORTYPE vdec_alloc_meta_buffers();
+    void vdec_dealloc_meta_buffers();
 #endif
 
     inline void omx_report_error ()
@@ -775,6 +772,8 @@ private:
     OMX_U32 h264_last_au_flags;
     OMX_U32 m_demux_offsets[8192];
     OMX_U32 m_demux_entries;
+    OMX_U32 m_disp_hor_size;
+    OMX_U32 m_disp_vert_size;
 
     OMX_S64 prev_ts;
     bool rst_prev_ts;
@@ -808,6 +807,16 @@ private:
         int offset;
     };
     h264_mv_buffer h264_mv_buff;
+
+    struct meta_buffer{
+        unsigned char* buffer;
+        int size;
+        int count;
+        int pmem_fd;
+        int pmem_fd_iommu;
+        int offset;
+    };
+    meta_buffer meta_buff;
 	extra_data_handler extra_data_handle;
 #ifdef _ANDROID_
     DivXDrmDecrypt* iDivXDrmDecrypt;
@@ -816,6 +825,8 @@ private:
     omx_time_stamp_reorder time_stamp_dts;
     desc_buffer_hdr *m_desc_buffer_ptr;
     bool secure_mode;
+    bool external_meta_buffer;
+    bool external_meta_buffer_iommu;
     OMX_QCOM_EXTRADATA_FRAMEINFO *m_extradata;
     bool codec_config_flag;
 #ifdef _COPPER_
@@ -872,6 +883,8 @@ private:
     static bool m_secure_display; //For qservice
     int secureDisplay(int mode);
     int unsecureDisplay(int mode);
+    bool msg_thread_created;
+    bool async_thread_created;
 };
 
 #ifdef _COPPER_

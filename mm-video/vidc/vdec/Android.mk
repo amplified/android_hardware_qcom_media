@@ -37,6 +37,9 @@ libOmxVdec-def += -DMAX_RES_1080P_EBI
 libOmxVdec-def += -DPROCESS_EXTRADATA_IN_OUTPUT_PORT
 libOmxVdec-def += -D_COPPER_
 endif
+ifeq ($(TARGET_BOARD_PLATFORM),msm7x30)
+libOmxVdec-def += -DMAX_RES_720P
+endif
 
 libOmxVdec-def += -D_ANDROID_ICS_
 
@@ -72,6 +75,8 @@ libmm-vdec-inc          += hardware/qcom/media/libc2dcolorconvert
 libmm-vdec-inc          += hardware/qcom/$(DISPLAY)/libcopybit
 libmm-vdec-inc          += frameworks/av/include/media/stagefright
 libmm-vdec-inc          += hardware/qcom/$(DISPLAY)/libqservice
+libmm-vdec-inc          += frameworks/av/media/libmediaplayerservice
+libmm-vdec-inc          += frameworks/native/include/binder
 
 
 LOCAL_MODULE                    := libOmxVdec
@@ -105,13 +110,13 @@ mm-vdec-test-inc    := hardware/qcom/media/mm-core/inc
 mm-vdec-test-inc    += $(LOCAL_PATH)/inc
 
 LOCAL_MODULE                    := mm-vdec-omx-test
-LOCAL_MODULE_TAGS               := optional
+LOCAL_MODULE_TAGS               := debug
 LOCAL_CFLAGS                    := $(libOmxVdec-def)
 LOCAL_CFLAGS                    += -fno-strict-aliasing
 LOCAL_C_INCLUDES                := $(mm-vdec-test-inc)
 
 LOCAL_PRELINK_MODULE      := false
-LOCAL_SHARED_LIBRARIES    := libutils libOmxCore libOmxVdec libbinder
+LOCAL_SHARED_LIBRARIES    := libutils libOmxCore libOmxVdec libbinder libcutils
 
 LOCAL_SRC_FILES           := src/queue.c
 LOCAL_SRC_FILES           += test/omx_vdec_test.cpp
@@ -127,7 +132,7 @@ mm-vdec-drv-test-inc    := hardware/qcom/media/mm-core/inc
 mm-vdec-drv-test-inc    += $(LOCAL_PATH)/inc
 
 LOCAL_MODULE                    := mm-video-driver-test
-LOCAL_MODULE_TAGS               := optional
+LOCAL_MODULE_TAGS               := debug
 LOCAL_CFLAGS                    := $(libOmxVdec-def)
 LOCAL_CFLAGS                    += -fno-strict-aliasing
 LOCAL_C_INCLUDES                := $(mm-vdec-drv-test-inc)
